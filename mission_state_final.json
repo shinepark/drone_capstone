@@ -1,0 +1,26 @@
+{
+  "drone1": {
+    "drone_id": 1,
+    "current_waypoint_index": 138,
+    "total_waypoints": 138,
+    "elapsed_flight_time": 732.628520025187,
+    "remaining_battery": -1.7539611146093037,
+    "last_position": [
+      -35.36182605517795,
+      149.17065269999912
+    ],
+    "mission_complete": true
+  },
+  "drone2": {
+    "drone_id": 2,
+    "current_waypoint_index": 136,
+    "total_waypoints": 136,
+    "elapsed_flight_time": 369.5605782841792,
+    "remaining_battery": 48.672141904975106,
+    "last_position": [
+      -35.36245012520055,
+      149.17076594161787
+    ],
+    "mission_complete": true
+  }
+}

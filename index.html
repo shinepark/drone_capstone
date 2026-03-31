@@ -287,7 +287,8 @@
 
   .output-panel { grid-column: 1 / -1; }
 
-  .drones-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .drones-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; box-sizing: border-box; }
+  .drones-grid > * { min-width: 0; overflow: hidden; }
   @media (max-width: 600px) { .drones-grid { grid-template-columns: 1fr; } }
 
   .drone-card {

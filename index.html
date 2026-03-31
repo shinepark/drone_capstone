@@ -22,6 +22,63 @@
     --sans: 'Barlow Condensed', sans-serif;
   }
 
+  body.light {
+    --bg: #eef2f7;
+    --panel: #ffffff;
+    --border: #c5d3e0;
+    --accent: #0077aa;
+    --accent2: #d4501a;
+    --text: #1a2a38;
+    --muted: #6b85a0;
+  }
+
+  body.light::before {
+    background:
+      radial-gradient(ellipse 60% 40% at 80% 10%, rgba(0,119,170,0.07) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 30% at 10% 80%, rgba(0,119,170,0.04) 0%, transparent 50%);
+  }
+
+  body.light .grid-bg {
+    background-image:
+      linear-gradient(rgba(0,100,150,0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,100,150,0.06) 1px, transparent 1px);
+  }
+
+  body.light input[type="text"],
+  body.light input[type="number"],
+  body.light select { background: #f0f5fa; }
+
+  body.light .waypoints-preview { background: #f0f5fa; }
+  body.light .drone-card { background: #f4f8fc; }
+  body.light .map-canvas-wrap { background: #e8eef5; }
+  body.light .progress-bar-wrap { background: #dce6f0; }
+  body.light .generate-btn { color: #fff; }
+  body.light .dl-btn.d1,
+  body.light .dl-btn.d2 { color: #fff; }
+
+  .theme-toggle {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 100;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    color: var(--text);
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 6px 14px 6px 10px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: border-color 0.2s, background 0.2s, color 0.2s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  .theme-toggle:hover { border-color: var(--accent); }
+  .theme-toggle .icon { font-size: 15px; line-height: 1; }
+
   body {
     background: var(--bg);
     color: var(--text);
@@ -391,6 +448,9 @@
 </head>
 <body>
 <div class="grid-bg"></div>
+<button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">
+  <span class="icon">☀️</span><span id="themeLabel">LIGHT</span>
+</button>
 <div class="content">
 
   <header>
@@ -486,6 +546,7 @@
   <footer>
     Dual Drone Flight Planner — generates <code>.waypoints</code> files compatible with
     <a href="https://ardupilot.org/planner/" target="_blank">Mission Planner</a> (QGC WPL 110 format).
+    No data is sent to any server — all processing runs in your browser.
   </footer>
 
 </div><!-- /content -->
@@ -896,6 +957,22 @@ function downloadFile(droneId, flightIndex) {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
+}
+
+// ── Theme Toggle ──
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  document.getElementById('themeLabel').textContent = isLight ? 'DARK' : 'LIGHT';
+  document.querySelector('.theme-toggle .icon').textContent = isLight ? 'DARK' : 'LIGHT';
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  drawMap();
+}
+
+// Restore saved theme on load
+if (localStorage.getItem('theme') === 'light') {
+  document.body.classList.add('light');
+  document.getElementById('themeLabel').textContent = 'DARK';
+  document.querySelector('.theme-toggle .icon').textContent = 'DARK';
 }
 
 // Init

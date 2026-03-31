@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dual Drone Flight Planner</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0e14;
+    --panel: #0f1520;
+    --border: #1e2d40;
+    --accent: #00d4ff;
+    --accent2: #ff6b35;
+    --green: #39ff14;
+    --text: #c8d8e8;
+    --muted: #4a6070;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Barlow Condensed', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding: 24px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 80% 10%, rgba(0,212,255,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 40% 30% at 10% 80%, rgba(57,255,20,0.04) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .grid-bg {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .content { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    margin-bottom: 8px;
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    animation: blink 3s infinite;
+  }
+
+  @keyframes blink {
+    0%, 90%, 100% { opacity: 1; }
+    95% { opacity: 0.3; }
+  }
+
+  h1 {
+    font-family: var(--sans);
+    font-size: 36px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #fff;
+    line-height: 1;
+  }
+
+  h1 span { color: var(--accent); }
+
+  .subtitle {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    margin-bottom: 28px;
+    text-transform: uppercase;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 750px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    position: relative;
+  }
+
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+    border-radius: 4px 4px 0 0;
+  }
+
+  .panel-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .coords-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+
+  .coord-row {
+    display: grid;
+    grid-template-columns: 22px 1fr 1fr 28px;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .coord-num {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    text-align: center;
+    padding-top: 2px;
+  }
+
+  input[type="text"], input[type="number"], select {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 7px 9px;
+    width: 100%;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+
+  input:focus, select:focus { border-color: var(--accent); }
+  input::placeholder { color: var(--muted); }
+
+  .remove-btn {
+    background: none;
+    border: 1px solid #ff3333;
+    border-radius: 2px;
+    color: #ff3333;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 4px 7px;
+    transition: all 0.2s;
+  }
+  .remove-btn:hover { background: #ff3333; color: #fff; }
+
+  .add-coord-btn {
+    background: none;
+    border: 1px dashed var(--border);
+    border-radius: 2px;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 8px;
+    width: 100%;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+  .add-coord-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .settings-grid { display: grid; gap: 12px; }
+
+  .field-group { display: flex; flex-direction: column; gap: 5px; }
+
+  label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .input-with-unit {
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+
+  .input-with-unit input { border-radius: 2px 0 0 2px; }
+
+  .unit-badge {
+    background: rgba(0,212,255,0.08);
+    border: 1px solid var(--border);
+    border-left: none;
+    border-radius: 0 2px 2px 0;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+  }
+
+  .map-canvas-wrap {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    height: 180px;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+
+  canvas#map { width: 100%; height: 100%; display: block; }
+
+  .map-label {
+    position: absolute;
+    top: 8px; left: 8px;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .generate-btn {
+    background: var(--accent);
+    border: none;
+    border-radius: 2px;
+    color: #000;
+    cursor: pointer;
+    font-family: var(--sans);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    padding: 14px;
+    text-transform: uppercase;
+    width: 100%;
+    transition: all 0.2s;
+    margin-top: 8px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .generate-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.4s;
+  }
+
+  .generate-btn:hover::after { transform: translateX(100%); }
+  .generate-btn:hover { background: #00eeff; }
+  .generate-btn:disabled { background: var(--muted); cursor: not-allowed; }
+
+  .output-panel { grid-column: 1 / -1; }
+
+  .drones-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 600px) { .drones-grid { grid-template-columns: 1fr; } }
+
+  .drone-card {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 14px;
+    position: relative;
+  }
+
+  .drone-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+  }
+  .drone-card.d1::before { background: var(--accent); }
+  .drone-card.d2::before { background: var(--accent2); }
+
+  .drone-name {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    margin-bottom: 10px;
+  }
+  .drone-card.d1 .drone-name { color: var(--accent); }
+  .drone-card.d2 .drone-name { color: var(--accent2); }
+
+  .stat-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+  .stat-label { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .stat-val { font-family: var(--mono); font-size: 11px; color: var(--text); }
+
+  .dl-btn {
+    border-radius: 2px;
+    cursor: pointer;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    padding: 10px;
+    text-transform: uppercase;
+    width: 100%;
+    margin-top: 10px;
+    transition: all 0.2s;
+    border: none;
+  }
+
+  .dl-btn.d1 { background: var(--accent); color: #000; }
+  .dl-btn.d1:hover { background: #00eeff; }
+  .dl-btn.d2 { background: var(--accent2); color: #000; }
+  .dl-btn.d2:hover { background: #ff8c5a; }
+
+  .progress-bar-wrap { background: rgba(0,0,0,0.4); border-radius: 2px; height: 4px; margin-top: 8px; margin-bottom: 2px; }
+  .progress-bar { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+  .d1 .progress-bar { background: var(--accent); }
+  .d2 .progress-bar { background: var(--accent2); }
+
+  .hidden { display: none; }
+
+  .error-msg {
+    background: rgba(255,50,50,0.1);
+    border: 1px solid rgba(255,50,50,0.3);
+    border-radius: 2px;
+    color: #ff6060;
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 10px;
+    margin-top: 10px;
+  }
+
+  .waypoints-preview {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    padding: 8px;
+    margin-top: 8px;
+    max-height: 80px;
+    overflow-y: auto;
+    line-height: 1.6;
+    white-space: pre;
+  }
+
+  footer {
+    margin-top: 32px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-align: center;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="content">
+
+  <header>
+    <div class="logo">▶ SYS ACTIVE</div>
+    <div>
+      <h1>Dual<span>Drone</span> Planner</h1>
+    </div>
+  </header>
+  <p class="subtitle">// Mission Planner Waypoint Generator — Multi-UAV Field Coverage</p>
+
+  <div class="layout">
+    <!-- Left: Coordinates -->
+    <div class="panel">
+      <div class="panel-title">◈ Field Boundary Coordinates</div>
+      <div class="map-canvas-wrap">
+        <canvas id="map" width="500" height="180"></canvas>
+        <div class="map-label">FIELD PREVIEW</div>
+      </div>
+      <div class="coords-list" id="coordsList"></div>
+      <button class="add-coord-btn" onclick="addCoord()">+ Add Vertex</button>
+    </div>
+
+    <!-- Right: Settings -->
+    <div class="panel">
+      <div class="panel-title">⚙ Flight Parameters</div>
+      <div class="settings-grid">
+        <div class="field-group">
+          <label>Flight Altitude</label>
+          <div class="input-with-unit">
+            <input type="number" id="altitude" value="50" min="10" max="400" step="5">
+            <div class="unit-badge">m AGL</div>
+          </div>
+        </div>
+        <div class="field-group">
+          <label>Max Flight Time (per battery)</label>
+          <div class="input-with-unit">
+            <input type="number" id="flightTime" value="900" min="120" max="3600" step="60">
+            <div class="unit-badge">seconds</div>
+          </div>
+        </div>
+        <div class="field-group">
+          <label>Sweep Line Spacing</label>
+          <div class="input-with-unit">
+            <input type="number" id="sweepSpacing" value="5.5" min="1" max="50" step="0.5">
+            <div class="unit-badge">meters</div>
+          </div>
+        </div>
+        <div class="field-group">
+          <label>Cruise Speed</label>
+          <div class="input-with-unit">
+            <input type="number" id="cruiseSpeed" value="20" min="1" max="40" step="1">
+            <div class="unit-badge">m/s</div>
+          </div>
+        </div>
+        <div class="field-group">
+          <label>Battery Reserve</label>
+          <div class="input-with-unit">
+            <input type="number" id="batteryReserve" value="20" min="5" max="40" step="5">
+            <div class="unit-badge">%</div>
+          </div>
+        </div>
+      </div>
+      <button class="generate-btn" onclick="generatePlan()">▶ Generate Mission Files</button>
+      <div id="errorMsg" class="error-msg hidden"></div>
+    </div>
+
+    <!-- Output -->
+    <div class="panel output-panel hidden" id="outputPanel">
+      <div class="panel-title">✦ Mission Output</div>
+      <div class="drones-grid">
+        <div class="drone-card d1">
+          <div class="drone-name">DRONE_01 // ALPHA</div>
+          <div class="stat-row"><span class="stat-label">Waypoints</span><span class="stat-val" id="d1wps">—</span></div>
+          <div class="stat-row"><span class="stat-label">Est. Flight Time</span><span class="stat-val" id="d1time">—</span></div>
+          <div class="stat-row"><span class="stat-label">Area Coverage</span><span class="stat-val" id="d1area">~50%</span></div>
+          <div class="progress-bar-wrap"><div class="progress-bar" id="d1bar" style="width:0%"></div></div>
+          <div class="waypoints-preview" id="d1preview"></div>
+          <button class="dl-btn d1" onclick="downloadFile(1)">↓ Download .waypoints</button>
+        </div>
+        <div class="drone-card d2">
+          <div class="drone-name">DRONE_02 // BRAVO</div>
+          <div class="stat-row"><span class="stat-label">Waypoints</span><span class="stat-val" id="d2wps">—</span></div>
+          <div class="stat-row"><span class="stat-label">Est. Flight Time</span><span class="stat-val" id="d2time">—</span></div>
+          <div class="stat-row"><span class="stat-label">Area Coverage</span><span class="stat-val" id="d2area">~50%</span></div>
+          <div class="progress-bar-wrap"><div class="progress-bar" id="d2bar" style="width:0%"></div></div>
+          <div class="waypoints-preview" id="d2preview"></div>
+          <button class="dl-btn d2" onclick="downloadFile(2)">↓ Download .waypoints</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Dual Drone Flight Planner — generates <code>.waypoints</code> files compatible with
+    <a href="https://ardupilot.org/planner/" target="_blank">Mission Planner</a> (QGC WPL 110 format).
+    No data is sent to any server — all processing runs in your browser.
+  </footer>
+
+</div><!-- /content -->
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let coords = [
+  { lat: -35.3610561, lon: 149.1672027 },
+  { lat: -35.3607236, lon: 149.1704965 },
+  { lat: -35.3626485, lon: 149.1707969 },
+  { lat: -35.3629285, lon: 149.1675997 },
+];
+
+let generatedFiles = { 1: null, 2: null };
+
+// ── Coord UI ──────────────────────────────────────────────────────────────────
+function renderCoords() {
+  const list = document.getElementById('coordsList');
+  list.innerHTML = '';
+  coords.forEach((c, i) => {
+    const row = document.createElement('div');
+    row.className = 'coord-row';
+    row.innerHTML = `
+      <div class="coord-num">${i+1}</div>
+      <input type="text" placeholder="Latitude" value="${c.lat}" oninput="updateCoord(${i},'lat',this.value)">
+      <input type="text" placeholder="Longitude" value="${c.lon}" oninput="updateCoord(${i},'lon',this.value)">
+      <button class="remove-btn" onclick="removeCoord(${i})">×</button>
+    `;
+    list.appendChild(row);
+  });
+  drawMap();
+}
+
+function updateCoord(i, key, val) {
+  coords[i][key] = parseFloat(val) || 0;
+  drawMap();
+}
+
+function addCoord() {
+  const last = coords[coords.length - 1] || { lat: 0, lon: 0 };
+  coords.push({ lat: last.lat + 0.001, lon: last.lon + 0.001 });
+  renderCoords();
+}
+
+function removeCoord(i) {
+  if (coords.length <= 3) return;
+  coords.splice(i, 1);
+  renderCoords();
+}
+
+// ── Map Preview ───────────────────────────────────────────────────────────────
+function drawMap() {
+  const canvas = document.getElementById('map');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const valid = coords.filter(c => !isNaN(c.lat) && !isNaN(c.lon) && c.lat !== 0);
+  if (valid.length < 2) return;
+
+  const lats = valid.map(c => c.lat);
+  const lons = valid.map(c => c.lon);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  const pad = 28;
+
+  const toX = lon => pad + (lon - minLon) / (maxLon - minLon + 1e-9) * (W - 2*pad);
+  const toY = lat => H - pad - (lat - minLat) / (maxLat - minLat + 1e-9) * (H - 2*pad);
+
+  // Field polygon fill
+  ctx.beginPath();
+  valid.forEach((c, i) => i === 0 ? ctx.moveTo(toX(c.lon), toY(c.lat)) : ctx.lineTo(toX(c.lon), toY(c.lat)));
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(0,212,255,0.07)';
+  ctx.fill();
+
+  // Split line preview
+  const midLon = (minLon + maxLon) / 2;
+  ctx.beginPath();
+  ctx.moveTo(toX(midLon), toY(minLat));
+  ctx.lineTo(toX(midLon), toY(maxLat));
+  ctx.strokeStyle = 'rgba(255,107,53,0.3)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Field outline
+  ctx.beginPath();
+  valid.forEach((c, i) => i === 0 ? ctx.moveTo(toX(c.lon), toY(c.lat)) : ctx.lineTo(toX(c.lon), toY(c.lat)));
+  ctx.closePath();
+  ctx.strokeStyle = '#00d4ff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Vertices
+  valid.forEach((c, i) => {
+    ctx.beginPath();
+    ctx.arc(toX(c.lon), toY(c.lat), 4, 0, Math.PI*2);
+    ctx.fillStyle = '#00d4ff';
+    ctx.fill();
+    ctx.fillStyle = 'rgba(200,216,232,0.7)';
+    ctx.font = '9px Share Tech Mono, monospace';
+    ctx.fillText(`P${i+1}`, toX(c.lon)+6, toY(c.lat)-4);
+  });
+
+  // Drone zone labels
+  const midX = toX(midLon);
+  ctx.fillStyle = 'rgba(0,212,255,0.6)';
+  ctx.font = '10px Share Tech Mono, monospace';
+  ctx.fillText('D1', midX - 28, H/2);
+  ctx.fillStyle = 'rgba(255,107,53,0.6)';
+  ctx.fillText('D2', midX + 10, H/2);
+}
+
+// ── Math Helpers ──────────────────────────────────────────────────────────────
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const p1 = lat1*Math.PI/180, p2 = lat2*Math.PI/180;
+  const dp = (lat2-lat1)*Math.PI/180, dl = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dp/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function pointInPolygon(px, py, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length-1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1];
+    const xj = poly[j][0], yj = poly[j][1];
+    if ((yi > py) !== (yj > py) && px < (xj-xi)*(py-yi)/(yj-yi)+xi) inside = !inside;
+  }
+  return inside;
+}
+
+function segmentIntersect(ax,ay,bx,by,cx,cy,dx,dy) {
+  const denom = (bx-ax)*(dy-cy)-(by-ay)*(dx-cx);
+  if (Math.abs(denom)<1e-10) return null;
+  const t = ((cx-ax)*(dy-cy)-(cy-ay)*(dx-cx))/denom;
+  const u = ((cx-ax)*(by-ay)-(cy-ay)*(bx-ax))/denom;
+  if (t>=0&&t<=1&&u>=0&&u<=1) return [ax+t*(bx-ax), ay+t*(by-ay)];
+  return null;
+}
+
+function clipSweepToPolygon(y, minX, maxX, poly) {
+  const pts = [];
+  for (let i = 0; i < poly.length; i++) {
+    const j = (i+1)%poly.length;
+    const p = segmentIntersect(minX,y,maxX,y, poly[i][0],poly[i][1],poly[j][0],poly[j][1]);
+    if (p) pts.push(p[0]);
+  }
+  pts.sort((a,b)=>a-b);
+  const segs = [];
+  for (let i = 0; i < pts.length-1; i+=2) {
+    const mx = (pts[i]+pts[i+1])/2;
+    if (pointInPolygon(mx, y, poly)) segs.push([pts[i], pts[i+1]]);
+  }
+  return segs;
+}
+
+function generateSweep(polyPoints, altitude, sweepSpacingM, droneId) {
+  const spacingDeg = sweepSpacingM / 111320;
+  const lats = polyPoints.map(p=>p[0]);
+  const lons = polyPoints.map(p=>p[1]);
+  const minLat=Math.min(...lats), maxLat=Math.max(...lats);
+  const minLon=Math.min(...lons), maxLon=Math.max(...lons);
+  const poly = polyPoints.map(p=>[p[0],p[1]]);
+
+  const waypoints = [];
+  let dir = 1, idx = 0;
+
+  for (let lat=minLat; lat<=maxLat+spacingDeg/2; lat+=spacingDeg) {
+    const segs = clipSweepToPolygon(lat, minLon-0.0001, maxLon+0.0001, poly);
+    for (const [x0,x1] of segs) {
+      const pts = dir === 1 ? [[lat,x0],[lat,x1]] : [[lat,x1],[lat,x0]];
+      for (const [la,lo] of pts) {
+        waypoints.push({ lat:la, lon:lo, alt:altitude, index:idx++, droneId });
+      }
+    }
+    dir *= -1;
+  }
+  return waypoints;
+}
+
+function splitPolygon(pts) {
+  const lons = pts.map(p=>p[1]);
+  const lats = pts.map(p=>p[0]);
+  const midLon = (Math.min(...lons)+Math.max(...lons))/2;
+  const midLat = (Math.min(...lats)+Math.max(...lats))/2;
+
+  function clipSide(pts, testFn, splitVal, axis) {
+    const result = [];
+    for (let i = 0; i < pts.length; i++) {
+      const j = (i+1)%pts.length;
+      const p = pts[i], q = pts[j];
+      if (testFn(p)) result.push([...p]);
+      const pIn = testFn(p), qIn = testFn(q);
+      if (pIn !== qIn) {
+        if (axis === 'lon') {
+          const t = (splitVal - p[1]) / (q[1] - p[1]);
+          result.push([p[0]+t*(q[0]-p[0]), splitVal]);
+        } else {
+          const t = (splitVal - p[0]) / (q[0] - p[0]);
+          result.push([splitVal, p[1]+t*(q[1]-p[1])]);
+        }
+      }
+    }
+    return result.length >= 3 ? result : null;
+  }
+
+  const left  = clipSide(pts, p=>p[1]<=midLon, midLon, 'lon');
+  const right = clipSide(pts, p=>p[1]>=midLon, midLon, 'lon');
+  if (left && right) return [left, right];
+
+  const top = clipSide(pts, p=>p[0]>=midLat, midLat, 'lat');
+  const bot = clipSide(pts, p=>p[0]<=midLat, midLat, 'lat');
+  if (top && bot) return [top, bot];
+
+  return [pts, pts];
+}
+
+function estimateFlightTime(waypoints, speed) {
+  let dist = 0;
+  for (let i=1;i<waypoints.length;i++) {
+    dist += haversine(waypoints[i-1].lat, waypoints[i-1].lon, waypoints[i].lat, waypoints[i].lon);
+  }
+  return dist/speed;
+}
+
+function buildWaypointFile(waypoints, altitude) {
+  const lines = ['QGC WPL 110'];
+  if (!waypoints.length) return lines.join('\n');
+  lines.push(`0\t1\t0\t16\t0\t0\t0\t0\t${waypoints[0].lat.toFixed(7)}\t${waypoints[0].lon.toFixed(7)}\t${altitude}\t1`);
+  waypoints.forEach((wp, i) => {
+    lines.push(`${i+1}\t0\t3\t16\t0\t0\t0\t0\t${wp.lat.toFixed(7)}\t${wp.lon.toFixed(7)}\t${wp.alt}\t1`);
+  });
+  lines.push(`${waypoints.length+1}\t0\t3\t20\t0\t0\t0\t0\t0\t0\t0\t1`);
+  return lines.join('\n');
+}
+
+// ── Generate ──────────────────────────────────────────────────────────────────
+function generatePlan() {
+  const err = document.getElementById('errorMsg');
+  err.classList.add('hidden');
+
+  const valid = coords.filter(c => !isNaN(c.lat) && !isNaN(c.lon) && c.lat!==0 && c.lon!==0);
+  if (valid.length < 3) {
+    err.textContent = 'ERROR: Need at least 3 valid coordinate points to define a polygon.';
+    err.classList.remove('hidden');
+    return;
+  }
+
+  const altitude      = parseFloat(document.getElementById('altitude').value)      || 50;
+  const sweepM        = parseFloat(document.getElementById('sweepSpacing').value)   || 5.5;
+  const speed         = parseFloat(document.getElementById('cruiseSpeed').value)    || 20;
+
+  const pts = valid.map(c => [c.lat, c.lon]);
+  const [region1, region2] = splitPolygon(pts);
+
+  const wps1 = generateSweep(region1, altitude, sweepM, 1);
+  const wps2 = generateSweep(region2, altitude, sweepM, 2);
+
+  if (!wps1.length || !wps2.length) {
+    err.textContent = 'ERROR: Could not generate waypoints. Check that your coordinates form a valid polygon.';
+    err.classList.remove('hidden');
+    return;
+  }
+
+  const t1 = estimateFlightTime(wps1, speed);
+  const t2 = estimateFlightTime(wps2, speed);
+
+  generatedFiles[1] = buildWaypointFile(wps1, altitude);
+  generatedFiles[2] = buildWaypointFile(wps2, altitude);
+
+  document.getElementById('d1wps').textContent  = wps1.length;
+  document.getElementById('d2wps').textContent  = wps2.length;
+  document.getElementById('d1time').textContent = formatTime(t1);
+  document.getElementById('d2time').textContent = formatTime(t2);
+
+  const maxWps = Math.max(wps1.length, wps2.length);
+  document.getElementById('d1bar').style.width = (wps1.length/maxWps*100)+'%';
+  document.getElementById('d2bar').style.width = (wps2.length/maxWps*100)+'%';
+
+  document.getElementById('d1preview').textContent = generatedFiles[1].split('\n').slice(0,6).join('\n') + '\n...';
+  document.getElementById('d2preview').textContent = generatedFiles[2].split('\n').slice(0,6).join('\n') + '\n...';
+
+  document.getElementById('outputPanel').classList.remove('hidden');
+  document.getElementById('outputPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function formatTime(s) {
+  if (s < 60) return `${Math.round(s)}s`;
+  const m = Math.floor(s/60), sec = Math.round(s%60);
+  return `${m}m ${sec}s`;
+}
+
+function downloadFile(droneId) {
+  const content = generatedFiles[droneId];
+  if (!content) return;
+  const blob = new Blob([content], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `drone${droneId}_mission.waypoints`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+// Init
+renderCoords();
+drawMap();
+</script>
+</body>
+</html>

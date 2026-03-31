@@ -463,20 +463,20 @@
         <div class="drone-card d1">
           <div class="drone-name">DRONE_01 // ALPHA</div>
           <div class="stat-row"><span class="stat-label">Waypoints</span><span class="stat-val" id="d1wps">—</span></div>
-          <div class="stat-row"><span class="stat-label">Est. Flight Time</span><span class="stat-val" id="d1time">—</span></div>
-          <div class="stat-row"><span class="stat-label">Area Coverage</span><span class="stat-val" id="d1area">~50%</span></div>
+          <div class="stat-row"><span class="stat-label">Est. Total Flight Time</span><span class="stat-val" id="d1time">—</span></div>
+          <div class="stat-row"><span class="stat-label">Battery Flights</span><span class="stat-val" id="d1flights">—</span></div>
           <div class="progress-bar-wrap"><div class="progress-bar" id="d1bar" style="width:0%"></div></div>
           <div class="waypoints-preview" id="d1preview"></div>
-          <button class="dl-btn d1" onclick="downloadFile(1)">↓ Download .waypoints</button>
+          <div id="d1buttons"></div>
         </div>
         <div class="drone-card d2">
           <div class="drone-name">DRONE_02 // BRAVO</div>
           <div class="stat-row"><span class="stat-label">Waypoints</span><span class="stat-val" id="d2wps">—</span></div>
-          <div class="stat-row"><span class="stat-label">Est. Flight Time</span><span class="stat-val" id="d2time">—</span></div>
-          <div class="stat-row"><span class="stat-label">Area Coverage</span><span class="stat-val" id="d2area">~50%</span></div>
+          <div class="stat-row"><span class="stat-label">Est. Total Flight Time</span><span class="stat-val" id="d2time">—</span></div>
+          <div class="stat-row"><span class="stat-label">Battery Flights</span><span class="stat-val" id="d2flights">—</span></div>
           <div class="progress-bar-wrap"><div class="progress-bar" id="d2bar" style="width:0%"></div></div>
           <div class="waypoints-preview" id="d2preview"></div>
-          <button class="dl-btn d2" onclick="downloadFile(2)">↓ Download .waypoints</button>
+          <div id="d2buttons"></div>
         </div>
       </div>
     </div>
@@ -485,20 +485,27 @@
   <footer>
     Dual Drone Flight Planner — generates <code>.waypoints</code> files compatible with
     <a href="https://ardupilot.org/planner/" target="_blank">Mission Planner</a> (QGC WPL 110 format).
+    No data is sent to any server — all processing runs in your browser.
   </footer>
 
 </div><!-- /content -->
 
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
+// coords stored as { lat, lon, latStr, lonStr } — raw strings kept so partial
+// typing (e.g. "-35.") doesn't get clobbered to 0
 let coords = [
-  { lat: , lon:  },
-  { lat: , lon:  },
-  { lat: , lon:  },
-  { lat: , lon:  },
-];
+  { lat: -35.3610561, lon: 149.1672027 },
+  { lat: -35.3607236, lon: 149.1704965 },
+  { lat: -35.3626485, lon: 149.1707969 },
+  { lat: -35.3629285, lon: 149.1675997 },
+].map(c => ({ ...c, latStr: String(c.lat), lonStr: String(c.lon) }));
 
-let generatedFiles = { 1: null, 2: null };
+// allWaypoints[droneId] = full list for entire mission
+// flightSegments[droneId] = array of per-battery arrays
+let allWaypoints  = { 1: [], 2: [] };
+let flightSegments = { 1: [], 2: [] };
+let generatedFiles = { 1: [], 2: [] }; // array of file strings per flight
 
 // ── Coord UI ──────────────────────────────────────────────────────────────────
 function renderCoords() {
@@ -509,8 +516,10 @@ function renderCoords() {
     row.className = 'coord-row';
     row.innerHTML = `
       <div class="coord-num">${i+1}</div>
-      <input type="text" placeholder="Latitude" value="${c.lat}" oninput="updateCoord(${i},'lat',this.value)">
-      <input type="text" placeholder="Longitude" value="${c.lon}" oninput="updateCoord(${i},'lon',this.value)">
+      <input type="text" placeholder="Latitude" value="${c.latStr}"
+             oninput="updateCoord(${i},'lat',this.value)">
+      <input type="text" placeholder="Longitude" value="${c.lonStr}"
+             oninput="updateCoord(${i},'lon',this.value)">
       <button class="remove-btn" onclick="removeCoord(${i})">×</button>
     `;
     list.appendChild(row);
@@ -519,13 +528,23 @@ function renderCoords() {
 }
 
 function updateCoord(i, key, val) {
-  coords[i][key] = parseFloat(val) || 0;
-  drawMap();
+  // Store raw string so partial typing is preserved; only update numeric if parseable
+  if (key === 'lat') {
+    coords[i].latStr = val;
+    const n = parseFloat(val);
+    if (!isNaN(n)) { coords[i].lat = n; drawMap(); }
+  } else {
+    coords[i].lonStr = val;
+    const n = parseFloat(val);
+    if (!isNaN(n)) { coords[i].lon = n; drawMap(); }
+  }
 }
 
 function addCoord() {
   const last = coords[coords.length - 1] || { lat: 0, lon: 0 };
-  coords.push({ lat: last.lat + 0.001, lon: last.lon + 0.001 });
+  const c = { lat: last.lat + 0.001, lon: last.lon + 0.001 };
+  c.latStr = String(c.lat); c.lonStr = String(c.lon);
+  coords.push(c);
   renderCoords();
 }
 
@@ -542,7 +561,11 @@ function drawMap() {
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
 
-  const valid = coords.filter(c => !isNaN(c.lat) && !isNaN(c.lon) && c.lat !== 0);
+  // Only use coords where both lat and lon are valid finite numbers
+  const valid = coords.filter(c =>
+    isFinite(c.lat) && isFinite(c.lon) &&
+    !(c.lat === 0 && c.lon === 0)
+  );
   if (valid.length < 2) return;
 
   const lats = valid.map(c => c.lat);
@@ -554,25 +577,22 @@ function drawMap() {
   const toX = lon => pad + (lon - minLon) / (maxLon - minLon + 1e-9) * (W - 2*pad);
   const toY = lat => H - pad - (lat - minLat) / (maxLat - minLat + 1e-9) * (H - 2*pad);
 
-  // Field polygon fill
   ctx.beginPath();
   valid.forEach((c, i) => i === 0 ? ctx.moveTo(toX(c.lon), toY(c.lat)) : ctx.lineTo(toX(c.lon), toY(c.lat)));
   ctx.closePath();
   ctx.fillStyle = 'rgba(0,212,255,0.07)';
   ctx.fill();
 
-  // Split line preview
   const midLon = (minLon + maxLon) / 2;
   ctx.beginPath();
   ctx.moveTo(toX(midLon), toY(minLat));
   ctx.lineTo(toX(midLon), toY(maxLat));
-  ctx.strokeStyle = 'rgba(255,107,53,0.3)';
+  ctx.strokeStyle = 'rgba(255,107,53,0.35)';
   ctx.lineWidth = 1;
   ctx.setLineDash([4, 4]);
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Field outline
   ctx.beginPath();
   valid.forEach((c, i) => i === 0 ? ctx.moveTo(toX(c.lon), toY(c.lat)) : ctx.lineTo(toX(c.lon), toY(c.lat)));
   ctx.closePath();
@@ -580,27 +600,27 @@ function drawMap() {
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
-  // Vertices
   valid.forEach((c, i) => {
     ctx.beginPath();
     ctx.arc(toX(c.lon), toY(c.lat), 4, 0, Math.PI*2);
     ctx.fillStyle = '#00d4ff';
     ctx.fill();
-    ctx.fillStyle = 'rgba(200,216,232,0.7)';
+    ctx.fillStyle = 'rgba(200,216,232,0.8)';
     ctx.font = '9px Share Tech Mono, monospace';
     ctx.fillText(`P${i+1}`, toX(c.lon)+6, toY(c.lat)-4);
   });
 
-  // Drone zone labels
   const midX = toX(midLon);
-  ctx.fillStyle = 'rgba(0,212,255,0.6)';
   ctx.font = '10px Share Tech Mono, monospace';
+  ctx.fillStyle = 'rgba(0,212,255,0.7)';
   ctx.fillText('D1', midX - 28, H/2);
-  ctx.fillStyle = 'rgba(255,107,53,0.6)';
+  ctx.fillStyle = 'rgba(255,107,53,0.7)';
   ctx.fillText('D2', midX + 10, H/2);
 }
 
-// ── Math Helpers ──────────────────────────────────────────────────────────────
+// ── Geometry ──────────────────────────────────────────────────────────────────
+// All polygon arrays use [lon, lat] order (X=lon, Y=lat) so math is consistent
+
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371000;
   const p1 = lat1*Math.PI/180, p2 = lat2*Math.PI/180;
@@ -609,58 +629,63 @@ function haversine(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
+// poly = array of [lon, lat]  (X, Y)
 function pointInPolygon(px, py, poly) {
   let inside = false;
   for (let i = 0, j = poly.length-1; i < poly.length; j = i++) {
-    const xi = poly[i][0], yi = poly[i][1];
-    const xj = poly[j][0], yj = poly[j][1];
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
     if ((yi > py) !== (yj > py) && px < (xj-xi)*(py-yi)/(yj-yi)+xi) inside = !inside;
   }
   return inside;
 }
 
-function segmentIntersect(ax,ay,bx,by,cx,cy,dx,dy) {
-  const denom = (bx-ax)*(dy-cy)-(by-ay)*(dx-cx);
-  if (Math.abs(denom)<1e-10) return null;
-  const t = ((cx-ax)*(dy-cy)-(cy-ay)*(dx-cx))/denom;
-  const u = ((cx-ax)*(by-ay)-(cy-ay)*(bx-ax))/denom;
-  if (t>=0&&t<=1&&u>=0&&u<=1) return [ax+t*(bx-ax), ay+t*(by-ay)];
-  return null;
+// Returns x-coordinate of intersection of horizontal ray y=sweepY with polygon edge i→j
+function edgeIntersectX(sweepY, x1, y1, x2, y2) {
+  if ((y1 > sweepY) === (y2 > sweepY)) return null; // edge doesn't cross sweep line
+  return x1 + (sweepY - y1) * (x2 - x1) / (y2 - y1);
 }
 
-function clipSweepToPolygon(y, minX, maxX, poly) {
-  const pts = [];
+// Returns sorted list of [lonStart, lonEnd] sweep segments inside polygon
+// poly = [[lon,lat], ...]
+function clipSweepToPolygon(sweepLat, poly) {
+  const xs = [];
   for (let i = 0; i < poly.length; i++) {
-    const j = (i+1)%poly.length;
-    const p = segmentIntersect(minX,y,maxX,y, poly[i][0],poly[i][1],poly[j][0],poly[j][1]);
-    if (p) pts.push(p[0]);
+    const j = (i+1) % poly.length;
+    const [x1, y1] = poly[i];
+    const [x2, y2] = poly[j];
+    const x = edgeIntersectX(sweepLat, x1, y1, x2, y2);
+    if (x !== null) xs.push(x);
   }
-  pts.sort((a,b)=>a-b);
+  xs.sort((a, b) => a - b);
   const segs = [];
-  for (let i = 0; i < pts.length-1; i+=2) {
-    const mx = (pts[i]+pts[i+1])/2;
-    if (pointInPolygon(mx, y, poly)) segs.push([pts[i], pts[i+1]]);
+  for (let i = 0; i+1 < xs.length; i += 2) {
+    const mid = (xs[i] + xs[i+1]) / 2;
+    if (pointInPolygon(mid, sweepLat, poly)) {
+      segs.push([xs[i], xs[i+1]]);
+    }
   }
   return segs;
 }
 
+// Generate lawnmower waypoints for a polygon region
+// polyPoints = [[lon, lat], ...]
 function generateSweep(polyPoints, altitude, sweepSpacingM, droneId) {
   const spacingDeg = sweepSpacingM / 111320;
-  const lats = polyPoints.map(p=>p[0]);
-  const lons = polyPoints.map(p=>p[1]);
-  const minLat=Math.min(...lats), maxLat=Math.max(...lats);
-  const minLon=Math.min(...lons), maxLon=Math.max(...lons);
-  const poly = polyPoints.map(p=>[p[0],p[1]]);
+  const lats = polyPoints.map(p => p[1]);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
 
   const waypoints = [];
   let dir = 1, idx = 0;
 
-  for (let lat=minLat; lat<=maxLat+spacingDeg/2; lat+=spacingDeg) {
-    const segs = clipSweepToPolygon(lat, minLon-0.0001, maxLon+0.0001, poly);
-    for (const [x0,x1] of segs) {
-      const pts = dir === 1 ? [[lat,x0],[lat,x1]] : [[lat,x1],[lat,x0]];
-      for (const [la,lo] of pts) {
-        waypoints.push({ lat:la, lon:lo, alt:altitude, index:idx++, droneId });
+  for (let lat = minLat; lat <= maxLat + spacingDeg * 0.5; lat += spacingDeg) {
+    const segs = clipSweepToPolygon(lat, polyPoints);
+    for (const [lon0, lon1] of segs) {
+      const pair = dir === 1
+        ? [[lat, lon0], [lat, lon1]]
+        : [[lat, lon1], [lat, lon0]];
+      for (const [la, lo] of pair) {
+        waypoints.push({ lat: la, lon: lo, alt: altitude, index: idx++, droneId });
       }
     }
     dir *= -1;
@@ -668,59 +693,93 @@ function generateSweep(polyPoints, altitude, sweepSpacingM, droneId) {
   return waypoints;
 }
 
-function splitPolygon(pts) {
-  const lons = pts.map(p=>p[1]);
-  const lats = pts.map(p=>p[0]);
-  const midLon = (Math.min(...lons)+Math.max(...lons))/2;
-  const midLat = (Math.min(...lats)+Math.max(...lats))/2;
+// Split polygon into left/right halves at midpoint longitude
+// Input: [[lon, lat], ...]   Output: two such arrays
+function splitPolygon(poly) {
+  const lons = poly.map(p => p[0]);
+  const lats = poly.map(p => p[1]);
+  const midLon = (Math.min(...lons) + Math.max(...lons)) / 2;
+  const midLat = (Math.min(...lats) + Math.max(...lats)) / 2;
 
-  function clipSide(pts, testFn, splitVal, axis) {
-    const result = [];
-    for (let i = 0; i < pts.length; i++) {
-      const j = (i+1)%pts.length;
-      const p = pts[i], q = pts[j];
-      if (testFn(p)) result.push([...p]);
+  function clip(poly, testFn, splitCoord, axis) {
+    const out = [];
+    for (let i = 0; i < poly.length; i++) {
+      const j = (i + 1) % poly.length;
+      const p = poly[i], q = poly[j];
       const pIn = testFn(p), qIn = testFn(q);
+      if (pIn) out.push([...p]);
       if (pIn !== qIn) {
+        // Compute boundary intersection
         if (axis === 'lon') {
-          const t = (splitVal - p[1]) / (q[1] - p[1]);
-          result.push([p[0]+t*(q[0]-p[0]), splitVal]);
+          const t = (splitCoord - p[0]) / (q[0] - p[0]);
+          out.push([splitCoord, p[1] + t * (q[1] - p[1])]);
         } else {
-          const t = (splitVal - p[0]) / (q[0] - p[0]);
-          result.push([splitVal, p[1]+t*(q[1]-p[1])]);
+          const t = (splitCoord - p[1]) / (q[1] - p[1]);
+          out.push([p[0] + t * (q[0] - p[0]), splitCoord]);
         }
       }
     }
-    return result.length >= 3 ? result : null;
+    return out.length >= 3 ? out : null;
   }
 
-  const left  = clipSide(pts, p=>p[1]<=midLon, midLon, 'lon');
-  const right = clipSide(pts, p=>p[1]>=midLon, midLon, 'lon');
-  if (left && right) return [left, right];
+  // Try vertical (lon) split first
+  const left  = clip(poly, p => p[0] <= midLon, midLon, 'lon');
+  const right = clip(poly, p => p[0] >= midLon, midLon, 'lon');
+  if (left && right && left.length >= 3 && right.length >= 3) return [left, right];
 
-  const top = clipSide(pts, p=>p[0]>=midLat, midLat, 'lat');
-  const bot = clipSide(pts, p=>p[0]<=midLat, midLat, 'lat');
-  if (top && bot) return [top, bot];
+  // Fallback: horizontal (lat) split
+  const top = clip(poly, p => p[1] >= midLat, midLat, 'lat');
+  const bot = clip(poly, p => p[1] <= midLat, midLat, 'lat');
+  if (top && bot && top.length >= 3 && bot.length >= 3) return [top, bot];
 
-  return [pts, pts];
+  return [poly, poly]; // last resort: same area for both
 }
 
-function estimateFlightTime(waypoints, speed) {
-  let dist = 0;
-  for (let i=1;i<waypoints.length;i++) {
-    dist += haversine(waypoints[i-1].lat, waypoints[i-1].lon, waypoints[i].lat, waypoints[i].lon);
+// ── Multi-battery Resume ───────────────────────────────────────────────────────
+function sliceIntoFlights(waypoints, maxFlightSecs, speed, reserve) {
+  const effectiveTime = maxFlightSecs * (1 - reserve / 100);
+  const flights = [];
+  let i = 0;
+
+  while (i < waypoints.length) {
+    const home = waypoints[i];
+    const segment = [waypoints[i]];
+    let elapsed = 0;
+    i++;
+
+    while (i < waypoints.length) {
+      const dist = haversine(
+        waypoints[i-1].lat, waypoints[i-1].lon,
+        waypoints[i].lat,   waypoints[i].lon
+      );
+      const rthDist = haversine(
+        waypoints[i].lat,   waypoints[i].lon,
+        home.lat,           home.lon
+      );
+      const legTime = dist / speed;
+      const rthTime = rthDist / speed;
+
+      if (elapsed + legTime + rthTime > effectiveTime) break;
+      elapsed += legTime;
+      segment.push(waypoints[i]);
+      i++;
+    }
+    flights.push(segment);
   }
-  return dist/speed;
+  return flights;
 }
 
+// ── File Builder ──────────────────────────────────────────────────────────────
 function buildWaypointFile(waypoints, altitude) {
+  if (!waypoints.length) return '';
   const lines = ['QGC WPL 110'];
-  if (!waypoints.length) return lines.join('\n');
-  lines.push(`0\t1\t0\t16\t0\t0\t0\t0\t${waypoints[0].lat.toFixed(7)}\t${waypoints[0].lon.toFixed(7)}\t${altitude}\t1`);
+  // Home = first waypoint of this segment
+  const home = waypoints[0];
+  lines.push(`0\t1\t0\t16\t0\t0\t0\t0\t${home.lat.toFixed(7)}\t${home.lon.toFixed(7)}\t${altitude}\t1`);
   waypoints.forEach((wp, i) => {
     lines.push(`${i+1}\t0\t3\t16\t0\t0\t0\t0\t${wp.lat.toFixed(7)}\t${wp.lon.toFixed(7)}\t${wp.alt}\t1`);
   });
-  lines.push(`${waypoints.length+1}\t0\t3\t20\t0\t0\t0\t0\t0\t0\t0\t1`);
+  lines.push(`${waypoints.length+1}\t0\t3\t20\t0\t0\t0\t0\t0\t0\t0\t1`); // RTL
   return lines.join('\n');
 }
 
@@ -729,64 +788,110 @@ function generatePlan() {
   const err = document.getElementById('errorMsg');
   err.classList.add('hidden');
 
-  const valid = coords.filter(c => !isNaN(c.lat) && !isNaN(c.lon) && c.lat!==0 && c.lon!==0);
+  // Validate: all coords must be parseable finite numbers, not both zero
+  const valid = coords.filter(c =>
+    isFinite(c.lat) && isFinite(c.lon) &&
+    !(c.lat === 0 && c.lon === 0)
+  );
+
   if (valid.length < 3) {
-    err.textContent = 'ERROR: Need at least 3 valid coordinate points to define a polygon.';
-    err.classList.remove('hidden');
+    showError('Need at least 3 valid coordinate points to define a polygon.');
     return;
   }
 
-  const altitude      = parseFloat(document.getElementById('altitude').value)      || 50;
-  const sweepM        = parseFloat(document.getElementById('sweepSpacing').value)   || 5.5;
-  const speed         = parseFloat(document.getElementById('cruiseSpeed').value)    || 20;
+  const altitude   = parseFloat(document.getElementById('altitude').value)      || 50;
+  const maxTimeSec = parseFloat(document.getElementById('flightTime').value)     || 900;
+  const sweepM     = parseFloat(document.getElementById('sweepSpacing').value)   || 5.5;
+  const speed      = parseFloat(document.getElementById('cruiseSpeed').value)    || 20;
+  const reserve    = parseFloat(document.getElementById('batteryReserve').value) || 20;
 
-  const pts = valid.map(c => [c.lat, c.lon]);
-  const [region1, region2] = splitPolygon(pts);
+  // Build polygon in [lon, lat] order for geometry functions
+  const poly = valid.map(c => [c.lon, c.lat]);
+  const [region1, region2] = splitPolygon(poly);
 
   const wps1 = generateSweep(region1, altitude, sweepM, 1);
   const wps2 = generateSweep(region2, altitude, sweepM, 2);
 
   if (!wps1.length || !wps2.length) {
-    err.textContent = 'ERROR: Could not generate waypoints. Check that your coordinates form a valid polygon.';
-    err.classList.remove('hidden');
+    showError('Could not generate waypoints — coordinates may not form a valid closed polygon. Try reordering them clockwise.');
     return;
   }
 
-  const t1 = estimateFlightTime(wps1, speed);
-  const t2 = estimateFlightTime(wps2, speed);
+  // Slice each drone's path into per-battery flights
+  flightSegments[1] = sliceIntoFlights(wps1, maxTimeSec, speed, reserve);
+  flightSegments[2] = sliceIntoFlights(wps2, maxTimeSec, speed, reserve);
 
-  generatedFiles[1] = buildWaypointFile(wps1, altitude);
-  generatedFiles[2] = buildWaypointFile(wps2, altitude);
+  // Build .waypoints file strings for each flight
+  generatedFiles[1] = flightSegments[1].map(seg => buildWaypointFile(seg, altitude));
+  generatedFiles[2] = flightSegments[2].map(seg => buildWaypointFile(seg, altitude));
 
-  document.getElementById('d1wps').textContent  = wps1.length;
-  document.getElementById('d2wps').textContent  = wps2.length;
-  document.getElementById('d1time').textContent = formatTime(t1);
-  document.getElementById('d2time').textContent = formatTime(t2);
+  allWaypoints[1] = wps1;
+  allWaypoints[2] = wps2;
 
-  const maxWps = Math.max(wps1.length, wps2.length);
-  document.getElementById('d1bar').style.width = (wps1.length/maxWps*100)+'%';
-  document.getElementById('d2bar').style.width = (wps2.length/maxWps*100)+'%';
+  updateOutputUI(speed);
+}
 
-  document.getElementById('d1preview').textContent = generatedFiles[1].split('\n').slice(0,6).join('\n') + '\n...';
-  document.getElementById('d2preview').textContent = generatedFiles[2].split('\n').slice(0,6).join('\n') + '\n...';
+function updateOutputUI(speed) {
+  [1, 2].forEach(id => {
+    const wps   = allWaypoints[id];
+    const segs  = flightSegments[id];
+    const t     = wps.length > 1
+      ? wps.reduce((acc, wp, i) => i === 0 ? 0
+          : acc + haversine(wps[i-1].lat, wps[i-1].lon, wp.lat, wp.lon), 0) / speed
+      : 0;
+
+    document.getElementById(`d${id}wps`).textContent   = wps.length;
+    document.getElementById(`d${id}time`).textContent  = formatTime(t);
+    document.getElementById(`d${id}flights`).textContent = `${segs.length} flight${segs.length !== 1 ? 's' : ''}`;
+
+    const preview = generatedFiles[id][0] || '';
+    document.getElementById(`d${id}preview`).textContent =
+      preview.split('\n').slice(0, 6).join('\n') + (preview.split('\n').length > 6 ? '\n...' : '');
+
+    // Render per-flight download buttons
+    const btnWrap = document.getElementById(`d${id}buttons`);
+    btnWrap.innerHTML = '';
+    generatedFiles[id].forEach((_, fi) => {
+      const btn = document.createElement('button');
+      btn.className = `dl-btn d${id}`;
+      btn.style.marginTop = '6px';
+      btn.textContent = segs.length === 1
+        ? `↓ Download .waypoints`
+        : `↓ Flight ${fi+1} of ${segs.length}`;
+      btn.onclick = () => downloadFile(id, fi);
+      btnWrap.appendChild(btn);
+    });
+  });
+
+  const maxWps = Math.max(allWaypoints[1].length, allWaypoints[2].length);
+  document.getElementById('d1bar').style.width = (allWaypoints[1].length / maxWps * 100) + '%';
+  document.getElementById('d2bar').style.width = (allWaypoints[2].length / maxWps * 100) + '%';
 
   document.getElementById('outputPanel').classList.remove('hidden');
   document.getElementById('outputPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+function showError(msg) {
+  const err = document.getElementById('errorMsg');
+  err.textContent = 'ERROR: ' + msg;
+  err.classList.remove('hidden');
+}
+
 function formatTime(s) {
+  if (!s || s < 1) return '—';
   if (s < 60) return `${Math.round(s)}s`;
-  const m = Math.floor(s/60), sec = Math.round(s%60);
+  const m = Math.floor(s / 60), sec = Math.round(s % 60);
   return `${m}m ${sec}s`;
 }
 
-function downloadFile(droneId) {
-  const content = generatedFiles[droneId];
+function downloadFile(droneId, flightIndex) {
+  const content = (generatedFiles[droneId] || [])[flightIndex];
   if (!content) return;
   const blob = new Blob([content], { type: 'text/plain' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `drone${droneId}_mission.waypoints`;
+  const suffix = generatedFiles[droneId].length > 1 ? `_flight${flightIndex+1}` : '';
+  a.download = `drone${droneId}_mission${suffix}.waypoints`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

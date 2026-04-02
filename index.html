@@ -531,12 +531,11 @@
 <body>
 <div class="grid-bg"></div>
 <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">
-  <span class="icon">☀️</span><span id="themeLabel">LIGHT</span>
+  <span class="icon"></span><span id="themeLabel">LIGHT</span>
 </button>
 <div class="content">
 
   <header>
-    <div class="logo">▶ SYS ACTIVE</div>
     <div>
       <h1>Dual<span>Drone</span> Planner</h1>
     </div>
@@ -546,7 +545,7 @@
   <div class="layout">
     <!-- Left: Coordinates -->
     <div class="panel">
-      <div class="panel-title">◈ Field Boundary Coordinates</div>
+      <div class="panel-title">Field Boundary Coordinates</div>
       <div class="map-canvas-wrap">
         <canvas id="map" width="500" height="180"></canvas>
         <div class="map-label">FIELD PREVIEW</div>
@@ -557,7 +556,7 @@
 
     <!-- Right: Settings -->
     <div class="panel">
-      <div class="panel-title">⚙ Flight Parameters</div>
+      <div class="panel-title">Flight Parameters</div>
       <div class="settings-grid">
         <div class="field-group">
           <label>Flight Altitude</label>
@@ -622,7 +621,7 @@
 
       <div class="drones-grid">
         <div class="drone-card d1">
-          <div class="drone-name">DRONE_01 // ALPHA</div>
+          <div class="drone-name">DRONE_01</div>
           <div class="stat-row"><span class="stat-label">Waypoints</span><span class="stat-val" id="d1wps">—</span></div>
           <div class="stat-row"><span class="stat-label">Est. Total Flight Time</span><span class="stat-val" id="d1time">—</span></div>
           <div class="stat-row"><span class="stat-label">Battery Flights</span><span class="stat-val" id="d1flights">—</span></div>
@@ -631,7 +630,7 @@
           <div id="d1buttons"></div>
         </div>
         <div class="drone-card d2">
-          <div class="drone-name">DRONE_02 // BRAVO</div>
+          <div class="drone-name">DRONE_02</div>
           <div class="stat-row"><span class="stat-label">Waypoints</span><span class="stat-val" id="d2wps">—</span></div>
           <div class="stat-row"><span class="stat-label">Est. Total Flight Time</span><span class="stat-val" id="d2time">—</span></div>
           <div class="stat-row"><span class="stat-label">Battery Flights</span><span class="stat-val" id="d2flights">—</span></div>
@@ -646,7 +645,6 @@
   <footer>
     Dual Drone Flight Planner — generates <code>.waypoints</code> files compatible with
     <a href="https://ardupilot.org/planner/" target="_blank">Mission Planner</a> (QGC WPL 110 format).
-    No data is sent to any server — all processing runs in your browser.
   </footer>
 
 </div><!-- /content -->

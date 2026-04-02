@@ -344,6 +344,88 @@
 
   .output-panel { grid-column: 1 / -1; }
 
+  :root {
+    --d1c: #00d4ff;
+    --d2c: #ff6b35;
+  }
+  body.light {
+    --d1c: #0077aa;
+    --d2c: #d4501a;
+  }
+
+  .viz-wrap {
+    position: relative;
+    width: 100%;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  body.light .viz-wrap { background: #e8eef5; }
+
+  #vizCanvas {
+    display: block;
+    width: 100%;
+    height: 320px;
+  }
+
+  .viz-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 10px 12px;
+    pointer-events: none;
+  }
+
+  .viz-tabs {
+    display: flex;
+    gap: 4px;
+    pointer-events: all;
+  }
+
+  .viz-tab {
+    background: rgba(0,0,0,0.5);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    padding: 4px 10px;
+    transition: all 0.15s;
+  }
+  body.light .viz-tab { background: rgba(255,255,255,0.7); }
+  .viz-tab:hover { border-color: var(--accent); color: var(--text); }
+  .viz-tab.active { background: var(--accent); border-color: var(--accent); color: #000; font-weight: bold; }
+  body.light .viz-tab.active { color: #fff; }
+
+  .viz-legend {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text);
+    background: rgba(0,0,0,0.45);
+    border-radius: 2px;
+    padding: 4px 10px;
+    pointer-events: none;
+  }
+  body.light .viz-legend { background: rgba(255,255,255,0.75); }
+
+  .viz-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 3px;
+    vertical-align: middle;
+  }
+
   .drones-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; box-sizing: border-box; }
   .drones-grid > * { min-width: 0; overflow: hidden; }
   @media (max-width: 600px) { .drones-grid { grid-template-columns: 1fr; } }
@@ -520,6 +602,24 @@
     <!-- Output -->
     <div class="panel output-panel hidden" id="outputPanel">
       <div class="panel-title">✦ Mission Output</div>
+
+      <!-- Waypoint visualizer -->
+      <div class="viz-wrap">
+        <canvas id="vizCanvas"></canvas>
+        <div class="viz-overlay">
+          <div class="viz-tabs">
+            <button class="viz-tab active" onclick="setVizMode('both',this)">Both Drones</button>
+            <button class="viz-tab" onclick="setVizMode(1,this)">Drone 1</button>
+            <button class="viz-tab" onclick="setVizMode(2,this)">Drone 2</button>
+          </div>
+          <div class="viz-legend">
+            <span class="viz-dot" style="background:var(--d1c)"></span>Drone 1
+            <span class="viz-dot" style="background:var(--d2c)"></span>Drone 2
+            <span class="viz-dot" style="background:rgba(255,255,255,0.5);border:1px solid rgba(255,255,255,0.3)"></span>Boundary
+          </div>
+        </div>
+      </div>
+
       <div class="drones-grid">
         <div class="drone-card d1">
           <div class="drone-name">DRONE_01 // ALPHA</div>
@@ -930,6 +1030,8 @@ function updateOutputUI(speed) {
 
   document.getElementById('outputPanel').classList.remove('hidden');
   document.getElementById('outputPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Give browser a frame to layout the canvas before drawing
+  requestAnimationFrame(() => drawMissionViz());
 }
 
 function showError(msg) {
@@ -959,25 +1061,190 @@ function downloadFile(droneId, flightIndex) {
   URL.revokeObjectURL(a.href);
 }
 
-// ── Theme Toggle ──
+// ── Mission Visualizer ───────────────────────────────────────────────────────
+let vizMode = 'both'; // 'both' | 1 | 2
+
+function setVizMode(mode, btn) {
+  vizMode = mode;
+  document.querySelectorAll('.viz-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  drawMissionViz();
+}
+
+function drawMissionViz() {
+  const canvas = document.getElementById('vizCanvas');
+  if (!canvas) return;
+
+  // Set actual pixel dimensions to match display size
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = rect.width  * dpr;
+  canvas.height = rect.height * dpr;
+  const W = canvas.width, H = canvas.height;
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const DW = rect.width, DH = rect.height;
+  ctx.clearRect(0, 0, DW, DH);
+
+  const wps1 = allWaypoints[1];
+  const wps2 = allWaypoints[2];
+  if (!wps1.length && !wps2.length) return;
+
+  const isLight = document.body.classList.contains('light');
+  const c1 = isLight ? '#0077aa' : '#00d4ff';
+  const c2 = isLight ? '#d4501a' : '#ff6b35';
+  const boundaryCol = isLight ? 'rgba(30,60,100,0.7)' : 'rgba(200,220,255,0.6)';
+
+  // Gather all points to compute bounds
+  const allPts = [...wps1, ...wps2];
+  const lats = allPts.map(p => p.lat);
+  const lons = allPts.map(p => p.lon);
+  // Also include boundary coords
+  coords.filter(c => isFinite(c.lat) && isFinite(c.lon)).forEach(c => {
+    lats.push(c.lat); lons.push(c.lon);
+  });
+
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  const pad = 36;
+
+  const latSpan = maxLat - minLat || 1e-6;
+  const lonSpan = maxLon - minLon || 1e-6;
+
+  // Maintain aspect ratio
+  const scaleX = (DW - pad*2) / lonSpan;
+  const scaleY = (DH - pad*2) / latSpan;
+  const scale  = Math.min(scaleX, scaleY);
+  const offX   = (DW - lonSpan * scale) / 2;
+  const offY   = (DH - latSpan * scale) / 2;
+
+  const toX = lon => offX + (lon - minLon) * scale;
+  const toY = lat => DH - offY - (lat - minLat) * scale;
+
+  // ── Draw field boundary polygon ──
+  const validCoords = coords.filter(c => isFinite(c.lat) && isFinite(c.lon));
+  if (validCoords.length >= 3) {
+    ctx.beginPath();
+    validCoords.forEach((c, i) =>
+      i === 0 ? ctx.moveTo(toX(c.lon), toY(c.lat)) : ctx.lineTo(toX(c.lon), toY(c.lat))
+    );
+    ctx.closePath();
+    ctx.fillStyle = isLight ? 'rgba(0,100,160,0.06)' : 'rgba(0,212,255,0.05)';
+    ctx.fill();
+    ctx.strokeStyle = boundaryCol;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // ── Draw sweep path lines ──
+  function drawPath(wps, color, show) {
+    if (!show || wps.length < 2) return;
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.55;
+    wps.forEach((wp, i) => {
+      i === 0 ? ctx.moveTo(toX(wp.lon), toY(wp.lat))
+              : ctx.lineTo(toX(wp.lon), toY(wp.lat));
+    });
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // ── Draw waypoint dots ──
+  function drawDots(wps, color, show) {
+    if (!show || !wps.length) return;
+    ctx.fillStyle = color;
+    // Only draw dots if there aren't too many (performance + readability)
+    const maxDots = 400;
+    const step = Math.max(1, Math.floor(wps.length / maxDots));
+    wps.forEach((wp, i) => {
+      if (i % step !== 0) return;
+      ctx.beginPath();
+      ctx.arc(toX(wp.lon), toY(wp.lat), 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    // Always draw first and last
+    if (wps.length > 0) {
+      ctx.beginPath();
+      ctx.arc(toX(wps[0].lon), toY(wps[0].lat), 4, 0, Math.PI*2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.strokeStyle = isLight ? '#fff' : '#000';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+
+  const show1 = vizMode === 'both' || vizMode === 1;
+  const show2 = vizMode === 'both' || vizMode === 2;
+
+  drawPath(wps1, c1, show1);
+  drawPath(wps2, c2, show2);
+  drawDots(wps1, c1, show1);
+  drawDots(wps2, c2, show2);
+
+  // ── Home position markers ──
+  function drawHome(wp, color, label, show) {
+    if (!show || !wp) return;
+    const x = toX(wp.lon), y = toY(wp.lat);
+    ctx.beginPath();
+    ctx.arc(x, y, 7, 0, Math.PI*2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = isLight ? '#fff' : '#000';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = isLight ? '#fff' : '#000';
+    ctx.font = `bold ${9 * dpr / dpr}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, x, y);
+  }
+
+  drawHome(wps1[0], c1, '1', show1);
+  drawHome(wps2[0], c2, '2', show2);
+
+  // ── Scale bar ──
+  const barMeters = 50;
+  const barDeg = barMeters / 111320;
+  const barPx = barDeg * scale;
+  const bx = pad, by = DH - 14;
+  ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(bx + barPx, by);
+  ctx.stroke();
+  ctx.fillStyle = isLight ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)';
+  ctx.font = '9px Share Tech Mono, monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(`${barMeters}m`, bx + barPx + 4, by + 2);
+}
+
+// ── Theme Toggle ─
 function toggleTheme() {
   const isLight = document.body.classList.toggle('light');
   document.getElementById('themeLabel').textContent = isLight ? 'DARK' : 'LIGHT';
-  document.querySelector('.theme-toggle .icon').textContent = isLight ? 'DARK' : 'LIGHT';
   localStorage.setItem('theme', isLight ? 'light' : 'dark');
   drawMap();
+  drawMissionViz();
 }
 
 // Restore saved theme on load
 if (localStorage.getItem('theme') === 'light') {
   document.body.classList.add('light');
   document.getElementById('themeLabel').textContent = 'DARK';
-  document.querySelector('.theme-toggle .icon').textContent = 'DARK';
 }
 
 // Init
 renderCoords();
 drawMap();
+window.addEventListener('resize', () => drawMissionViz());
 </script>
 </body>
 </html>

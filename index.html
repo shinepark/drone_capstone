@@ -568,7 +568,7 @@
         <div class="field-group">
           <label>Max Flight Time (per battery)</label>
           <div class="input-with-unit">
-            <input type="number" id="flightTime" value="630" min="120" max="3600" step="60">
+            <input type="number" id="flightTime" value="900" min="120" max="1200" step="60">
             <div class="unit-badge">seconds</div>
           </div>
         </div>
@@ -959,9 +959,9 @@ function generatePlan() {
   }
 
   const altitude   = parseFloat(document.getElementById('altitude').value)      || 50;
-  const maxTimeSec = parseFloat(document.getElementById('flightTime').value)     || 630;
+  const maxTimeSec = parseFloat(document.getElementById('flightTime').value)     || 900;
   const sweepM     = parseFloat(document.getElementById('sweepSpacing').value)   || 5.5;
-  const speed      = parseFloat(document.getElementById('cruiseSpeed').value)    || 20;
+  const speed      = parseFloat(document.getElementById('cruiseSpeed').value)    || 5.5;
   const reserve    = parseFloat(document.getElementById('batteryReserve').value) || 20;
 
   // Build polygon in [lon, lat] order for geometry functions

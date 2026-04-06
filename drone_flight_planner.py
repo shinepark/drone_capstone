@@ -39,9 +39,9 @@ class DualDroneFlightPlanner:
         self,
         field_points: List[Tuple[float, float]],
         flight_altitude: float = 50.0,  # meters
-        max_flight_time: float = 630.0,  # 10.5 minutes in seconds
+        max_flight_time: float = 1200.0,  # 20 minutes in seconds
         sweep_spacing: float = 0.0001,  # degrees (~11m at equator)
-        cruise_speed: float = 20.0,  # m/s
+        cruise_speed: float = 5.5,  # m/s
         battery_reserve: float = 0.20  # 15% safety margin
     ):
         """
@@ -333,9 +333,9 @@ if __name__ == "__main__":
     planner = DualDroneFlightPlanner(
         field_points=field_boundary,
         flight_altitude=50.0,  # 50 meters
-        max_flight_time=900.0,  # 15 minutes
+        max_flight_time=1200.0,  # 20 minutes
         sweep_spacing=0.00005,  # ~5.5m spacing
-        cruise_speed=20.0  # 20 m/s
+        cruise_speed=5.5  # m/s
     )
     
     # full flight paths
